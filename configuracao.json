@@ -1,0 +1,34 @@
+{
+    "versao": "0.1",
+    "alunos": [
+        {
+            "codigo": "aluno001",
+            "nome": "Otis",
+            "curso": "Sistemas de informacao",
+            "fotos": [
+                "faces/otis.png",
+                "faces/otis2.png",
+                "faces/otis3.png"
+            ]
+        },
+        {
+            "codigo": "aluno002",
+            "nome": "Maevi",
+            "curso": "Tecnico de informatica",
+            "fotos": [
+                "faces/maevi.jpg",
+                "faces/maevi2.jpg",
+                "faces/maevi3.jpg"
+            ]
+        },{
+            "codigo": "aluno003",
+            "nome": "Eric",
+            "curso": "Quimica",
+            "fotos": [
+                "faces/eric.jpg",
+                "faces/eric2.jpg",
+                "faces/eric3.jpg"
+            ]
+        }
+    ]
+}
