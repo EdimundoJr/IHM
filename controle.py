@@ -4,15 +4,18 @@ import secrets
 import random
 import simpy
 import json
+import os
+
 
 FOTOS_VISITANTES = [
-    "faces/visitantes.jpg",
+
     "faces/visitantes2.jpg",
     "faces/visitantes3.jpg"
 ]
+
 ARQUIVO_DE_CONFIGURACAO = "configuracao.json"
 
-TOTAL_DE_LEITOS_DE_UTI = 10
+#TOTAL_DE_LEITOS_DE_UTI = 10
 
 PROBABILIDADE_DE_LIBERACAO = 30
 PROBABILIDADE_DE_SER_EMERGENCIA = 10
@@ -76,41 +79,35 @@ def alunos_previamente_reconhecidos(aluno):
 def reconhecer_alunos(visitantes):
     global configuracao
 
-    print("realizando reconhecimento dos alunos...")
+    print("Realizando reconhecimento dos alunos...")
     foto_visitantes = reconhecedor.load_image_file(visitantes["foto"])
-    caracteristicas_dos_visitantes = reconhecedor.face_encodings(
-        foto_visitantes)
+    caracteristicas_dos_visitantes = reconhecedor.face_encodings(foto_visitantes)
+    localizacoes_faces_desconhecidas = reconhecedor.face_locations(foto_visitantes)
 
     alunos = []
+    num_faces_desconhecidas = len(localizacoes_faces_desconhecidas)  # Inicializa com a quantidade de faces desconhecidas
+
     for aluno in configuracao["alunos"]:
         if not alunos_previamente_reconhecidos(aluno):
             fotos = aluno["fotos"]
-            total_de_reconhecimentos = 0
+            num_faces_reconhecidas = 0
 
             for foto in fotos:
-                foto = reconhecedor.load_image_file(foto)
-                caracteristicas = reconhecedor.face_encodings(foto)[0]
+                foto_aluno = reconhecedor.load_image_file(foto)
+                caracteristicas_aluno = reconhecedor.face_encodings(foto_aluno)
 
-                reconhecimentos = reconhecedor.compare_faces(
-                    caracteristicas_dos_visitantes, caracteristicas)
-                if True in reconhecimentos:
-                    total_de_reconhecimentos += 1
+                if len(caracteristicas_aluno) > 0:
+                    reconhecimentos = reconhecedor.compare_faces(caracteristicas_dos_visitantes, caracteristicas_aluno[0])
+                    # if True in reconhecimentos:
+                    num_faces_reconhecidas += 1
 
-            if total_de_reconhecimentos/len(fotos) >= 0.6:
+            if num_faces_reconhecidas / len(fotos) >= 0.6:
                 alunos.append(aluno)
-        else:
-            print("aluno reconhecido previamente")
+                num_faces_desconhecidas = len(localizacoes_faces_desconhecidas) - num_faces_reconhecidas
 
-    return (len(alunos) > 0), alunos
+    print("Quantidade de rostos não conhecidos:", num_faces_desconhecidas)
 
-
-def imprimir_dados_do_aluno(aluno):
-    print(colored.fg('black'), colored.bg(
-        'blue'), f"aluno reconhecido em {ambiente_de_simulacao.now}", colored.attr('reset'))
-    print(colored.fg('black'), colored.bg(
-        'blue'), f"nome: {aluno['nome']}", colored.attr('reset'))
-    print(colored.fg('black'), colored.bg(
-        'blue'), f"curso: {aluno['curso']}", colored.attr('reset'))
+    return len(alunos) > 0, alunos
 
 # captura uma foto de visitantes e reconhece se tem pacientes
 # entre eles
@@ -120,24 +117,33 @@ def reconhecer_visitantes(ambiente_de_simulacao):
     global alunos_reconhecidos
 
     while True:
-        print(
-            f"--Tentando reconhecer um aluno entre visitantes em {ambiente_de_simulacao.now}")
+        print(f"--Tentando reconhecer um aluno entre visitantes em {ambiente_de_simulacao.now}")
 
         visitantes = simular_visitas()
-        ocorreram_reconhecimentos, alunos = reconhecer_alunos(visitantes)
+        ocorreram_reconhecimentos, alunos = reconhecer_alunos(visitantes)   
+       
         if ocorreram_reconhecimentos:
             for aluno in alunos:
-                aluno["tempo_para_liberacao"] = ambiente_de_simulacao.now + \
-                    TEMPO_MEDIO_DE_PERMANENCIA
-                # aluno["em_emergencia"] = False
+                aluno["tempo_para_liberacao"] = ambiente_de_simulacao.now + TEMPO_MEDIO_DE_PERMANENCIA
                 aluno["na_instituicao"] = False
 
                 id_entrada = secrets.token_hex(nbytes=16).upper()
                 alunos_reconhecidos[id_entrada] = aluno
 
                 imprimir_dados_do_aluno(aluno)
+       
+
 
         yield ambiente_de_simulacao.timeout(TEMPO_DE_DETECCAO_DE_ALUNOS)
+
+
+def imprimir_dados_do_aluno(aluno):
+    print(colored.fg('black'), colored.bg(
+        'blue'), f"aluno reconhecido em {ambiente_de_simulacao.now}", colored.attr('reset'))
+    print(colored.fg('black'), colored.bg(
+        'blue'), f"nome: {aluno['nome']}", colored.attr('reset'))
+    print(colored.fg('black'), colored.bg(
+        'blue'), f"curso: {aluno['curso']}", colored.attr('reset'))
 
 
 # identifica pacientes que podem ser liberados
@@ -167,6 +173,7 @@ def saida_de_alunos(ambiente_de_simulacao):
 # def identificar_emergencia(ambiente_de_simulacao):
 #     global alunos_reconhecidos
 
+
 #     while True:
 #         print(
 #             f"tentando identificar uma emergência em {ambiente_de_simulacao.now}")
@@ -184,6 +191,8 @@ def saida_de_alunos(ambiente_de_simulacao):
 #         yield ambiente_de_simulacao.timeout(TEMPO_DE_DETECCAO_DE_EMERGENCIAS)
 
 
+
+     
 def contar_alunos_na_instituicao():
     global alunos_reconhecidos
 
@@ -253,7 +262,7 @@ if __name__ == "__main__":
     ambiente_de_simulacao.process(reconhecer_visitantes(ambiente_de_simulacao))
     ambiente_de_simulacao.process(saida_de_alunos(ambiente_de_simulacao))
     # ambiente_de_simulacao.process(
-    #     identificar_emergencia(ambiente_de_simulacao))
+    # identificar_emergencia(ambiente_de_simulacao))
     # ambiente_de_simulacao.process(reservar_uti(ambiente_de_simulacao))
     # ambiente_de_simulacao.process(liberar_leito_da_uti(ambiente_de_simulacao))
     ambiente_de_simulacao.run(until=1000)
