@@ -4,34 +4,17 @@ import secrets
 import random
 import simpy
 import json
-import os
-
 
 FOTOS_VISITANTES = [
-
+    "faces/visitantes1.jpg",
     "faces/visitantes2.jpg",
     "faces/visitantes3.jpg"
 ]
 
 ARQUIVO_DE_CONFIGURACAO = "configuracao.json"
-
-#TOTAL_DE_LEITOS_DE_UTI = 10
-
-PROBABILIDADE_DE_LIBERACAO = 30
-PROBABILIDADE_DE_SER_EMERGENCIA = 10
-PROBABILIDADE_DE_ENVIO_PARA_UTI = 10
-PROBABILIDADE_DE_LIBERACAO_DA_UTI = 40
-
 TEMPO_MEDIO_DE_PERMANENCIA = 80
-TEMPO_MEDIO_DE_PERMANENCIA_EM_UTI = 60
-
 TEMPO_DE_DETECCAO_DE_ALUNOS = 40
 TEMPO_DE_SAIDA_DE_ALUNOS = 60
-TEMPO_DE_DETECCAO_DE_EMERGENCIAS = 20
-TEMPO_DE_DETECCAO_DE_ENVIO_PARA_UTI = 40
-TEMPO_DE_DETECCAO_DE_LIBERACAO_DA_UTI = 100
-
-# ler configuracoes e preparar estruturas de dados
 
 
 def preparar():
@@ -81,11 +64,12 @@ def reconhecer_alunos(visitantes):
 
     print("Realizando reconhecimento dos alunos...")
     foto_visitantes = reconhecedor.load_image_file(visitantes["foto"])
-    caracteristicas_dos_visitantes = reconhecedor.face_encodings(foto_visitantes)
-    localizacoes_faces_desconhecidas = reconhecedor.face_locations(foto_visitantes)
+    caracteristicas_dos_visitantes = reconhecedor.face_encodings(
+        foto_visitantes)
+    # localizacoes_faces_desconhecidas = reconhecedor.face_locations(foto_visitantes)
 
     alunos = []
-    num_faces_desconhecidas = len(localizacoes_faces_desconhecidas)  # Inicializa com a quantidade de faces desconhecidas
+    # num_faces_desconhecidas = len(localizacoes_faces_desconhecidas)  # Inicializa com a quantidade de faces desconhecidas
 
     for aluno in configuracao["alunos"]:
         if not alunos_previamente_reconhecidos(aluno):
@@ -97,42 +81,61 @@ def reconhecer_alunos(visitantes):
                 caracteristicas_aluno = reconhecedor.face_encodings(foto_aluno)
 
                 if len(caracteristicas_aluno) > 0:
-                    reconhecimentos = reconhecedor.compare_faces(caracteristicas_dos_visitantes, caracteristicas_aluno[0])
-                    # if True in reconhecimentos:
-                    num_faces_reconhecidas += 1
+                    reconhecimentos = reconhecedor.compare_faces(
+                        caracteristicas_dos_visitantes, caracteristicas_aluno[0])
+                    if True in reconhecimentos:
+                        num_faces_reconhecidas += 1
 
             if num_faces_reconhecidas / len(fotos) >= 0.6:
                 alunos.append(aluno)
-                num_faces_desconhecidas = len(localizacoes_faces_desconhecidas) - num_faces_reconhecidas
+                # num_faces_desconhecidas = len(localizacoes_faces_desconhecidas) - num_faces_reconhecidas
 
-    print("Quantidade de rostos não conhecidos:", num_faces_desconhecidas)
+    # print("Quantidade de rostos não conhecidos:", num_faces_desconhecidas)
 
     return len(alunos) > 0, alunos
 
-# captura uma foto de visitantes e reconhece se tem pacientes
-# entre eles
+
+def barrar_intruso(visitantes, alunos):
+    print("Detectando intrusos...")
+    foto_visitantes = reconhecedor.load_image_file(visitantes["foto"])
+    localizacoes_faces_desconhecidas = reconhecedor.face_locations(
+        foto_visitantes)
+
+    # Inicializa com a quantidade de faces desconhecidas
+    num_faces_desconhecidas = len(localizacoes_faces_desconhecidas)
+
+    num_faces_desconhecidas = len(
+        localizacoes_faces_desconhecidas) - len(alunos)
+    print(colored.fg('black'), colored.bg(
+        'red'), f"Quantidade de pessoas barradas:  {num_faces_desconhecidas}", colored.attr('reset'))
+    print(colored.fg('black'), colored.bg(
+        'red'), f"Em: {ambiente_de_simulacao.now}", colored.attr('reset'))
+
+    return num_faces_desconhecidas
 
 
 def reconhecer_visitantes(ambiente_de_simulacao):
     global alunos_reconhecidos
 
     while True:
-        print(f"--Tentando reconhecer um aluno entre visitantes em {ambiente_de_simulacao.now}")
+        print(
+            f"--Tentando reconhecer um aluno entre visitantes em {ambiente_de_simulacao.now}")
 
         visitantes = simular_visitas()
-        ocorreram_reconhecimentos, alunos = reconhecer_alunos(visitantes)   
-       
+        ocorreram_reconhecimentos, alunos = reconhecer_alunos(visitantes)
+
         if ocorreram_reconhecimentos:
             for aluno in alunos:
-                aluno["tempo_para_liberacao"] = ambiente_de_simulacao.now + TEMPO_MEDIO_DE_PERMANENCIA
+                aluno["tempo_para_liberacao"] = ambiente_de_simulacao.now + \
+                    TEMPO_MEDIO_DE_PERMANENCIA
                 aluno["na_instituicao"] = False
 
                 id_entrada = secrets.token_hex(nbytes=16).upper()
                 alunos_reconhecidos[id_entrada] = aluno
 
                 imprimir_dados_do_aluno(aluno)
-       
 
+        barrar_intruso(visitantes, alunos)
 
         yield ambiente_de_simulacao.timeout(TEMPO_DE_DETECCAO_DE_ALUNOS)
 
@@ -146,8 +149,6 @@ def imprimir_dados_do_aluno(aluno):
         'blue'), f"curso: {aluno['curso']}", colored.attr('reset'))
 
 
-# identifica pacientes que podem ser liberados
-# nao pode liberar quem estah em uti
 def saida_de_alunos(ambiente_de_simulacao):
     global alunos_reconhecidos
 
@@ -167,32 +168,7 @@ def saida_de_alunos(ambiente_de_simulacao):
 
         yield ambiente_de_simulacao.timeout(TEMPO_DE_SAIDA_DE_ALUNOS)
 
-# elege entre os pacientes aqueles q estao em situacao critica
 
-
-# def identificar_emergencia(ambiente_de_simulacao):
-#     global alunos_reconhecidos
-
-
-#     while True:
-#         print(
-#             f"tentando identificar uma emergência em {ambiente_de_simulacao.now}")
-
-#         if len(alunos_reconhecidos):
-#             for id_entrada, paciente in list(alunos_reconhecidos.items()):
-#                 if not paciente["em_emergencia"]:
-#                     emergencia_reconhecida = (random.randint(
-#                         1, 100) <= PROBABILIDADE_DE_SER_EMERGENCIA)
-#                     if emergencia_reconhecida:
-#                         alunos_reconhecidos[id_entrada]["em_emergencia"] = True
-#                         print(colored.fg('white'), colored.bg('blue'),
-#                               f"paciente {paciente['nome']} em situação de emergência em {ambiente_de_simulacao.now}", colored.attr('reset'))
-
-#         yield ambiente_de_simulacao.timeout(TEMPO_DE_DETECCAO_DE_EMERGENCIAS)
-
-
-
-     
 def contar_alunos_na_instituicao():
     global alunos_reconhecidos
 
@@ -203,57 +179,6 @@ def contar_alunos_na_instituicao():
 
     return alunos_na_instituicao
 
-# se paciente estiver em situacao de emergencia, identifica se
-# ele precisa ser transferido para a uti
-# nao pode enviar paciente se a capacidade maxima for extrapolada
-
-
-# def reservar_uti(ambiente_de_simulacao):
-#     global alunos_reconhecidos
-
-#     while True:
-#         print(
-#             f"tentando identificar uma transferência para a UTI em {ambiente_de_simulacao.now}")
-
-#         if len(alunos_reconhecidos) and contar_alunos_na_instituicao() >= TOTAL_DE_LEITOS_DE_UTI:
-#             print(
-#                 f"capacidade maxima de uti ultrapassada em {ambiente_de_simulacao.now}")
-#         else:
-#             for paciente in alunos_reconhecidos.values():
-#                 if paciente["em_emergencia"] and not paciente["na_instituicao"]:
-#                     enviar_para_uti = (random.randint(
-#                         1, 100)) <= PROBABILIDADE_DE_ENVIO_PARA_UTI
-#                     if enviar_para_uti:
-#                         paciente["tempo_para_liberacao_da_uti"] = ambiente_de_simulacao.now + \
-#                             TEMPO_MEDIO_DE_PERMANENCIA_EM_UTI
-#                         paciente["na_instituicao"] = True
-#                         print(colored.fg('white'), colored.bg(
-#                             'red'), f"paciente {paciente['nome']} enviado para a uti em {ambiente_de_simulacao.now}", colored.attr('reset'))
-
-#         yield ambiente_de_simulacao.timeout(TEMPO_DE_DETECCAO_DE_ENVIO_PARA_UTI)
-
-# libera um paciente que ocupa um leito de uti
-
-
-# def liberar_leito_da_uti(ambiente_de_simulacao):
-#     global alunos_reconhecidos
-
-#     while True:
-#         print(
-#             f"tentando identificar uma liberação de UTI em {ambiente_de_simulacao.now}")
-
-#         if len(alunos_reconhecidos):
-#             for paciente in alunos_reconhecidos.values():
-#                 if paciente["na_instituicao"] and ambiente_de_simulacao.now >= paciente["tempo_para_liberacao_da_uti"]:
-#                     paciente_liberado = (random.randint(
-#                         1, 100)) <= PROBABILIDADE_DE_LIBERACAO_DA_UTI
-#                     if paciente_liberado:
-#                         paciente["na_instituicao"] = False
-#                         print(colored.fg('white'), colored.bg(
-#                             'green'), f"paciente {paciente['nome']} liberado da uti em {ambiente_de_simulacao.now}", colored.attr('reset'))
-
-#         yield ambiente_de_simulacao.timeout(TEMPO_DE_DETECCAO_DE_LIBERACAO_DA_UTI)
-
 
 if __name__ == "__main__":
     preparar()
@@ -261,8 +186,4 @@ if __name__ == "__main__":
     ambiente_de_simulacao = simpy.Environment()
     ambiente_de_simulacao.process(reconhecer_visitantes(ambiente_de_simulacao))
     ambiente_de_simulacao.process(saida_de_alunos(ambiente_de_simulacao))
-    # ambiente_de_simulacao.process(
-    # identificar_emergencia(ambiente_de_simulacao))
-    # ambiente_de_simulacao.process(reservar_uti(ambiente_de_simulacao))
-    # ambiente_de_simulacao.process(liberar_leito_da_uti(ambiente_de_simulacao))
     ambiente_de_simulacao.run(until=1000)
