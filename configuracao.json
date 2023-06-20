@@ -30,5 +30,27 @@
                 "faces/eric3.jpg"
             ]
         }
+    ],
+    "intrusos": [
+        {
+            "codigo": "intruso001",
+            "nome": "Jackson",
+            "curso": "Nao esta cursando na instituicao",
+            "fotos": [
+                "faces/Jackson.jpg",
+                "faces/Jackson2.jpg",
+                "faces/Jackson3.jpg"
+            ]
+        },
+        {
+            "codigo": "intruso002",
+            "nome": "Aimee",
+            "curso": "Nao esta cursando na instituicao",
+            "fotos": [
+                "faces/Aimee.jpg",
+                "faces/Aimee2.jpg",
+                "faces/Aimee3.jpg"
+            ]
+        }
     ]
 }

@@ -12,8 +12,10 @@ FOTOS_VISITANTES = [
 ]
 
 ARQUIVO_DE_CONFIGURACAO = "configuracao.json"
+PROBABILIDADE_DE_LIBERACAO = 30
 TEMPO_MEDIO_DE_PERMANENCIA = 80
 TEMPO_DE_DETECCAO_DE_ALUNOS = 40
+TEMPO_DE_DETECCAO_DE_INTRUSOS = 40
 TEMPO_DE_SAIDA_DE_ALUNOS = 60
 
 
@@ -95,23 +97,56 @@ def reconhecer_alunos(visitantes):
     return len(alunos) > 0, alunos
 
 
-def barrar_intruso(visitantes, alunos):
-    print("Detectando intrusos...")
+def reconhecer_intrusos(visitantes):
+    global configuracao
+
+    print("Realizando reconhecimento dos intrusos...")
     foto_visitantes = reconhecedor.load_image_file(visitantes["foto"])
-    localizacoes_faces_desconhecidas = reconhecedor.face_locations(
+    caracteristicas_dos_visitantes = reconhecedor.face_encodings(
         foto_visitantes)
+    # localizacoes_faces_desconhecidas = reconhecedor.face_locations(foto_visitantes)
 
-    # Inicializa com a quantidade de faces desconhecidas
-    num_faces_desconhecidas = len(localizacoes_faces_desconhecidas)
+    intrusos = []
+    # num_faces_desconhecidas = len(localizacoes_faces_desconhecidas)  # Inicializa com a quantidade de faces desconhecidas
 
-    num_faces_desconhecidas = len(
-        localizacoes_faces_desconhecidas) - len(alunos)
-    print(colored.fg('black'), colored.bg(
-        'red'), f"Quantidade de pessoas barradas:  {num_faces_desconhecidas}", colored.attr('reset'))
-    print(colored.fg('black'), colored.bg(
-        'red'), f"Em: {ambiente_de_simulacao.now}", colored.attr('reset'))
+    for intruso in configuracao["intrusos"]:
+        
+            fotos = intruso["fotos"]
+            num_faces_reconhecidas = 0
 
-    return num_faces_desconhecidas
+            for foto in fotos:
+                foto_intruso = reconhecedor.load_image_file(foto)
+                caracteristicas_intruso = reconhecedor.face_encodings(foto_intruso)
+
+                if len(caracteristicas_intruso) > 0:
+                    reconhecimentos = reconhecedor.compare_faces(
+                        caracteristicas_dos_visitantes, caracteristicas_intruso[0])
+                    if True in reconhecimentos:
+                        num_faces_reconhecidas += 1
+
+            if num_faces_reconhecidas / len(fotos) >= 0.6:
+                intrusos.append(intruso)
+                
+
+    return len(intrusos) > 0, intrusos
+
+
+# def barrar_intruso(visitantes, alunos):
+#     print("Detectando intrusos...")
+#     foto_visitantes = reconhecedor.load_image_file(visitantes["foto"])
+#     localizacoes_faces_desconhecidas = reconhecedor.face_locations(
+#         foto_visitantes)
+
+#     num_faces_desconhecidas = len(localizacoes_faces_desconhecidas)
+
+#     num_faces_desconhecidas = len(
+#         localizacoes_faces_desconhecidas) - len(alunos)
+#     print(colored.fg('black'), colored.bg(
+#         'red'), f"Quantidade de pessoas barradas:  {num_faces_desconhecidas}", colored.attr('reset'))
+#     print(colored.fg('black'), colored.bg(
+#         'red'), f"Em: {ambiente_de_simulacao.now}", colored.attr('reset'))
+
+#     return num_faces_desconhecidas
 
 
 def reconhecer_visitantes(ambiente_de_simulacao):
@@ -135,10 +170,28 @@ def reconhecer_visitantes(ambiente_de_simulacao):
 
                 imprimir_dados_do_aluno(aluno)
 
-        barrar_intruso(visitantes, alunos)
+        # barrar_intruso(visitantes, alunos)
 
         yield ambiente_de_simulacao.timeout(TEMPO_DE_DETECCAO_DE_ALUNOS)
 
+
+def reconhecer_visitantes_intrusos(ambiente_de_simulacao):
+    global intrusos_reconhecidos
+
+    while True:
+        print(
+            f"--Tentando reconhecer um Intruso entre visitantes em {ambiente_de_simulacao.now}")
+
+        visitantes = simular_visitas()
+        ocorreram_reconhecimentos2, intrusos = reconhecer_intrusos(visitantes)
+
+        if ocorreram_reconhecimentos2:
+            for intruso in intrusos:
+                imprimir_dados_do_intruso(intruso)
+
+        
+
+        yield ambiente_de_simulacao.timeout(TEMPO_DE_DETECCAO_DE_INTRUSOS)
 
 def imprimir_dados_do_aluno(aluno):
     print(colored.fg('black'), colored.bg(
@@ -147,6 +200,15 @@ def imprimir_dados_do_aluno(aluno):
         'blue'), f"nome: {aluno['nome']}", colored.attr('reset'))
     print(colored.fg('black'), colored.bg(
         'blue'), f"curso: {aluno['curso']}", colored.attr('reset'))
+
+
+def imprimir_dados_do_intruso(intruso):
+    print(colored.fg('black'), colored.bg(
+        'red'), f"intruso reconhecido em {ambiente_de_simulacao.now}", colored.attr('reset'))
+    print(colored.fg('black'), colored.bg(
+        'red'), f"nome: {intruso['nome']}", colored.attr('reset'))
+    print(colored.fg('black'), colored.bg(
+        'red'), f"curso: {intruso['curso']}", colored.attr('reset'))
 
 
 def saida_de_alunos(ambiente_de_simulacao):
@@ -185,5 +247,6 @@ if __name__ == "__main__":
 
     ambiente_de_simulacao = simpy.Environment()
     ambiente_de_simulacao.process(reconhecer_visitantes(ambiente_de_simulacao))
+    ambiente_de_simulacao.process(reconhecer_visitantes_intrusos(ambiente_de_simulacao))
     ambiente_de_simulacao.process(saida_de_alunos(ambiente_de_simulacao))
     ambiente_de_simulacao.run(until=1000)
